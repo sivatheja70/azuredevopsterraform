@@ -1,0 +1,74 @@
+.before_script_template:
+  before_script:
+    - echo "Configuring environment for Terraform"
+    - rm -rf .terraform
+    - terraform --version
+    - export TF_VAR_region="us-east-1"
+
+stages:
+  - plan-tf
+  - apply-tf
+  - destroy-tf
+
+validate-runplan-tf:
+  stage: plan-tf
+  extends: .before_script_template
+  tags:
+    - ec2terraform
+  script:
+    - echo "Planning Environment Configuration"
+    - export TF_LOG=DEBUG
+    - export TF_LOG_PATH=plan-tf.log
+    - terraform init
+    - terraform validate
+    - terraform plan -out "planfile"
+    - terraform show -json planfile > tfplan.json
+  artifacts:
+    paths:
+      - ./planfile
+      - ./plan-tf.log
+      - ./tfplan.json
+    expire_in: 1 week
+  only:
+    - main
+
+deploy-tf:
+  stage: apply-tf
+  extends: .before_script_template
+  tags:
+    - ec2terraform
+  script:
+    - echo "Applying Environment Configuration"
+    - export TF_LOG=ERROR
+    - export TF_LOG_PATH=apply-tf.log
+    - terraform init
+    - terraform apply -auto-approve -input=false "planfile"
+  artifacts:
+    paths:
+      - ./apply-tf.log
+    expire_in: 1 week
+  when: manual
+  only:
+    - main
+  
+
+remove-tf:
+  stage: destroy-tf
+  extends: .before_script_template
+  tags:
+    - ec2terraform
+  script:
+    - echo "Destroying Environment Configuration"
+    - export TF_LOG=WARN
+    - export TF_LOG_PATH=destroy-tf.log
+    - terraform init
+    - terraform destroy -auto-approve || true
+
+  artifacts:
+    paths:
+      - ./destroy-tf.log
+    expire_in: 1 week
+  when: manual
+  only:
+    - main
+
